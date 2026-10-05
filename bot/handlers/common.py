@@ -42,14 +42,12 @@ Example: /afk sleeping
 Examples:
   /remind 2h study
   /remind 30m drink water
-  /remind 8pm call mom
+  /remind 1d submit assignment
 
 📚 **FOCUS MODE**
 /focus [duration] [goal] - Start a focus session
 /focusstats - View your focus statistics
 /focusoff - End current focus session
-/focuspause - Pause focus session
-/focusresume - Resume focus session
 Examples:
   /focus 4h studying
   /focus 2h work

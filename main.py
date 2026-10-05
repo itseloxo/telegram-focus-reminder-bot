@@ -1,10 +1,11 @@
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher
+from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
 from config import settings
 from database import init_db
-from bot.scheduler import init_scheduler
+from bot.scheduler import init_scheduler, schedule_pending_reminders
 from bot.handlers import afk, reminder, focus, common
 
 # Configure logging
@@ -31,6 +32,7 @@ async def main():
     # Initialize scheduler for reminders and focus timers
     logger.info("Initializing scheduler...")
     scheduler = init_scheduler()
+    dp["scheduler"] = scheduler
     
     # Register handlers
     logger.info("Registering handlers...")
@@ -46,7 +48,23 @@ async def main():
     
     # Focus handlers
     dp.include_router(focus.router)
-    
+
+    await bot.set_my_commands([
+        BotCommand(command="start", description="Start the bot"),
+        BotCommand(command="help", description="Show available commands"),
+        BotCommand(command="afk", description="Set your AFK status"),
+        BotCommand(command="unafk", description="Remove your AFK status"),
+        BotCommand(command="remind", description="Set a reminder"),
+        BotCommand(command="reminders", description="List your reminders"),
+        BotCommand(command="timezone", description="Set your timezone"),
+        BotCommand(command="focus", description="Start a focus session"),
+        BotCommand(command="focusoff", description="End your focus session"),
+        BotCommand(command="focusstats", description="Show your focus statistics"),
+    ])
+
+    # Restore active reminders from the database after every bot restart.
+    schedule_pending_reminders(bot, scheduler)
+
     # Start polling
     logger.info("Bot started. Polling for updates...")
     try:
