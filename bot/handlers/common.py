@@ -1,7 +1,11 @@
 from aiogram import Router, types
 from aiogram.filters import Command
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 import logging
+import re
 
+from config import settings
+from bot.webapp import normalize_webapp_url
 logger = logging.getLogger(__name__)
 
 router = Router()
@@ -10,6 +14,40 @@ router = Router()
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
     """Handle /start command."""
+    payload = (message.text or "").split(maxsplit=1)
+    if (
+        len(payload) == 2
+        and message.chat.type == "private"
+        and (match := re.fullmatch(r"famigo_(-?\d+)", payload[1]))
+    ):
+        group_id = int(match.group(1))
+        try:
+            member = await message.bot.get_chat_member(group_id, message.from_user.id)
+            if member.status in {"left", "kicked"} or (
+                member.status == "restricted" and not member.is_member
+            ):
+                await message.answer("You need to be a current member of that group to open its Famigo community.")
+                return
+        except Exception:
+            logger.exception("Could not verify group membership for Mini App deep link")
+            await message.answer("I couldn't verify your membership. Make sure Famigo is installed in that group and try again.")
+            return
+
+        webapp_url = normalize_webapp_url(settings.webapp_url)
+        if not webapp_url:
+            await message.answer("Famigo's Mini App is not configured yet. Ask the bot admin to set WEBAPP_URL in Railway.")
+            return
+        await message.answer(
+            "Open your group's Famigo community. Profiles and activity here are only for this group.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="Open Famigo",
+                    web_app=WebAppInfo(url=f"{webapp_url}?group_id={group_id}"),
+                )
+            ]]),
+        )
+        return
+
     await message.answer(
         "🤖 Welcome to Focus Reminder Bot!\n\n"
         "I can help with:\n\n"

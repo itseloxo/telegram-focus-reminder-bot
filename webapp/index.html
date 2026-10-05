@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#10131c">
+  <title>Famigo</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: var(--tg-theme-bg-color, #10131c);
+      --panel: var(--tg-theme-secondary-bg-color, #1a1f2b);
+      --text: var(--tg-theme-text-color, #f5f7fb);
+      --muted: var(--tg-theme-hint-color, #a0a8b8);
+      --accent: var(--tg-theme-button-color, #7367f0);
+      --accent-text: var(--tg-theme-button-text-color, #fff);
+      --line: color-mix(in srgb, var(--muted) 18%, transparent);
+      --good: #61d7a0;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, sans-serif; }
+    main { max-width: 720px; margin: auto; padding: 18px 16px 44px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    h1 { font-size: 25px; margin: 0; letter-spacing: -.5px; }
+    h2 { font-size: 18px; margin: 0 0 12px; }
+    p { margin: 6px 0; }
+    .muted, .hint { color: var(--muted); }
+    .hero { padding: 20px; border-radius: 20px; margin-bottom: 16px; background: linear-gradient(135deg, #7165ef, #3e83d8); color: white; }
+    .hero p { opacity: .9; max-width: 500px; }
+    .pill { display: inline-flex; padding: 5px 9px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); font-size: 12px; margin: 4px 4px 0 0; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0; }
+    button, .button { border: 0; border-radius: 12px; padding: 12px 15px; font: inherit; font-weight: 650; color: var(--accent-text); background: var(--accent); cursor: pointer; }
+    button.secondary { color: var(--text); background: var(--panel); }
+    button:disabled { opacity: .5; cursor: default; }
+    .tabs button { background: var(--panel); color: var(--muted); }
+    .tabs button.active { background: var(--accent); color: var(--accent-text); }
+    input, textarea, select { display: block; width: 100%; padding: 12px; margin: 7px 0 14px; border-radius: 11px; border: 1px solid var(--line); color: var(--text); background: var(--panel); font: inherit; }
+    textarea { min-height: 82px; resize: vertical; }
+    label { display: block; font-size: 13px; color: var(--muted); }
+    .card { padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); margin-bottom: 11px; }
+    .card-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .name { font-size: 17px; font-weight: 750; }
+    .card-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+    .card-actions button { padding: 9px 13px; }
+    .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+    .empty, .notice { padding: 18px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 15px; }
+    .notice { text-align: left; margin: 12px 0; }
+    .status { min-height: 20px; color: var(--muted); margin: 8px 0; }
+    .error { color: #ff8888; }
+    .success { color: var(--good); }
+    .group-select { margin: 26px auto; }
+    .hidden { display: none !important; }
+    @media (max-width: 480px) { .profile-grid { grid-template-columns: 1fr; } main { padding-top: 12px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header><h1>🤝 Famigo</h1><span class="pill" id="group-badge">Your group</span></header>
+    <div id="status" class="status">Connecting securely to Telegram…</div>
+    <section id="group-picker" class="group-select hidden">
+      <h2>Choose your community</h2>
+      <p class="muted">You can only see groups you belong to. Each group has separate profiles.</p>
+      <div id="groups"></div>
+    </section>
+    <section id="community" class="hidden">
+      <div class="hero">
+        <h2 id="welcome">Meet your people</h2>
+        <p>Discover people, shared interests, and new friends in this Telegram group. Your profile is shown only in this community.</p>
+      </div>
+      <div class="tabs">
+        <button id="discover-tab" class="active" type="button">Discover people</button>
+        <button id="profile-tab" type="button">My profile</button>
+      </div>
+      <section id="discover-panel">
+        <input id="search" type="search" placeholder="Search names, interests, or about…" aria-label="Search group members">
+        <div id="directory"></div>
+      </section>
+      <section id="profile-panel" class="hidden">
+        <div class="notice">Your profile and interests are saved for this group only. Hidden profiles are not shown in discovery.</div>
+        <form id="profile-form">
+          <div class="profile-grid">
+            <label>Display name<input name="display_name" maxlength="60" placeholder="How should the group know you?"></label>
+            <label>Pronouns<input name="pronouns" maxlength="60" placeholder="Optional"></label>
+            <label>City<input name="city" maxlength="80" placeholder="Optional"></label>
+            <label>Country<input name="country" maxlength="80" placeholder="Optional"></label>
+            <label>Profession<input name="profession" maxlength="100" placeholder="Optional"></label>
+            <label>Languages<input name="languages" maxlength="120" placeholder="Optional"></label>
+          </div>
+          <label>About you<textarea name="bio" maxlength="500" placeholder="A little about yourself…"></textarea></label>
+          <label>Fun fact<input name="fun_fact" maxlength="180" placeholder="Something people might not guess"></label>
+          <label>Interests <span class="hint">(separate with commas, up to 20)</span>
+            <input name="interests" maxlength="1700" placeholder="music, football, books">
+          </label>
+          <label>Who can discover your profile in this group?
+            <select name="visibility">
+              <option value="group_only">Group members</option>
+              <option value="hidden">Only me (hidden)</option>
+            </select>
+          </label>
+          <button type="submit">Save my group profile</button>
+        </form>
+      </section>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const tg = window.Telegram && window.Telegram.WebApp;
+      const statusNode = document.getElementById("status");
+      const community = document.getElementById("community");
+      const picker = document.getElementById("group-picker");
+      const params = new URLSearchParams(location.search);
+      let groupId = params.get("group_id");
+      let state = null;
+      const setStatus = (message, kind = "") => {
+        statusNode.textContent = message;
+        statusNode.className = `status ${kind}`;
+      };
+      const api = async (path, options = {}) => {
+        const response = await fetch(path, {
+          ...options,
+          headers: {
+            "Authorization": `tma ${tg.initData}`,
+            ...(options.body ? {"Content-Type": "application/json"} : {}),
+            ...(options.headers || {})
+          }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Request failed");
+        return data;
+      };
+      const textNode = (tag, value, className) => {
+        const node = document.createElement(tag);
+        node.textContent = value || "";
+        if (className) node.className = className;
+        return node;
+      };
+      const showGroupPicker = async () => {
+        const data = await api("/api/groups");
+        picker.classList.remove("hidden");
+        const list = document.getElementById("groups");
+        list.replaceChildren();
+        if (!data.groups.length) {
+          list.append(textNode("div", "Open Famigo from a group using /famigo first. That securely links this Telegram account to its group.", "empty"));
+          return;
+        }
+        data.groups.forEach(group => {
+          const button = textNode("button", group.title);
+          button.type = "button";
+          button.style.cssText = "display:block;width:100%;margin:10px 0";
+          button.addEventListener("click", () => {
+            groupId = String(group.id);
+            history.replaceState(null, "", `/?group_id=${encodeURIComponent(groupId)}`);
+            loadCommunity();
+          });
+          list.append(button);
+        });
+      };
+      const renderDirectory = () => {
+        const directory = document.getElementById("directory");
+        const term = document.getElementById("search").value.trim().toLocaleLowerCase();
+        directory.replaceChildren();
+        const entries = (state.profiles || []).filter(person =>
+          !term || [person.display_name, person.bio, person.city, person.country,
+            person.profession, person.interests.join(" "), person.activities.map(x => x.value).join(" ")]
+            .join(" ").toLocaleLowerCase().includes(term)
+        );
+        if (!entries.length) {
+          directory.append(textNode("div", term ? "No profiles match that search yet." : "No visible group profiles yet. Be the first to create one!", "empty"));
+          return;
+        }
+        entries.forEach(person => {
+          const card = document.createElement("article");
+          card.className = "card";
+          const top = document.createElement("div");
+          top.className = "card-top";
+          const identity = document.createElement("div");
+          identity.append(textNode("div", person.display_name, "name"));
+          if (person.username) identity.append(textNode("div", `@${person.username}`, "muted"));
+          top.append(identity, textNode("span", `Level ${person.level}`, "pill"));
+          card.append(top);
+          const place = [person.city, person.country].filter(Boolean).join(", ");
+          if (place) card.append(textNode("p", `📍 ${place}`));
+          if (person.bio) card.append(textNode("p", person.bio));
+          if (person.profession) card.append(textNode("p", `💼 ${person.profession}`));
+          if (person.interests.length) {
+            const chips = document.createElement("div");
+            person.interests.forEach(interest => chips.append(textNode("span", interest, "pill")));
+            card.append(chips);
+          }
+          if (person.mood) card.append(textNode("p", `Mood: ${person.mood}`));
+          person.activities.forEach(activity => card.append(textNode("p", `${activity.category}: ${activity.value}`)));
+          const actions = document.createElement("div");
+          actions.className = "card-actions";
+          const connect = textNode("button", "Say hi · Connect");
+          connect.type = "button";
+          connect.addEventListener("click", async () => {
+            connect.disabled = true;
+            try {
+              await api(`/api/connect?group_id=${encodeURIComponent(groupId)}`, {
+                method: "POST",
+                body: JSON.stringify({target_user_id: person.user_id})
+              });
+              connect.textContent = "Request sent";
+              setStatus("Your connection request was posted in this group.", "success");
+            } catch (error) {
+              connect.disabled = false;
+              setStatus(error.message, "error");
+            }
+          });
+          actions.append(connect);
+          card.append(actions);
+          directory.append(card);
+        });
+      };
+      const loadCommunity = async () => {
+        picker.classList.add("hidden");
+        setStatus("Loading your group…");
+        try {
+          state = await api(`/api/community?group_id=${encodeURIComponent(groupId)}`);
+          document.getElementById("group-badge").textContent = state.group.title;
+          document.getElementById("welcome").textContent = `Welcome to ${state.group.title}`;
+          community.classList.remove("hidden");
+          const form = document.getElementById("profile-form");
+          const profile = state.profile || {};
+          Object.entries(profile).forEach(([key, value]) => {
+            if (form.elements[key]) form.elements[key].value = value || "";
+          });
+          form.elements.interests.value = (profile.interests || []).join(", ");
+          renderDirectory();
+          setStatus(state.profile ? "Your group profile is ready." : "Create a profile to introduce yourself to this group.");
+        } catch (error) {
+          community.classList.add("hidden");
+          setStatus(error.message, "error");
+        }
+      };
+      document.getElementById("search").addEventListener("input", renderDirectory);
+      document.getElementById("discover-tab").addEventListener("click", () => {
+        document.getElementById("discover-panel").classList.remove("hidden");
+        document.getElementById("profile-panel").classList.add("hidden");
+        document.getElementById("discover-tab").classList.add("active");
+        document.getElementById("profile-tab").classList.remove("active");
+      });
+      document.getElementById("profile-tab").addEventListener("click", () => {
+        document.getElementById("profile-panel").classList.remove("hidden");
+        document.getElementById("discover-panel").classList.add("hidden");
+        document.getElementById("profile-tab").classList.add("active");
+        document.getElementById("discover-tab").classList.remove("active");
+      });
+      document.getElementById("profile-form").addEventListener("submit", async event => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        const interests = String(form.get("interests") || "").split(",").map(x => x.trim()).filter(Boolean);
+        try {
+          await api(`/api/profile?group_id=${encodeURIComponent(groupId)}`, {
+            method: "POST",
+            body: JSON.stringify({
+              display_name: form.get("display_name"),
+              pronouns: form.get("pronouns"),
+              city: form.get("city"),
+              country: form.get("country"),
+              profession: form.get("profession"),
+              languages: form.get("languages"),
+              bio: form.get("bio"),
+              fun_fact: form.get("fun_fact"),
+              interests,
+              visibility: form.get("visibility")
+            })
+          });
+          setStatus("Saved. Your profile is visible only in this group.", "success");
+          await loadCommunity();
+        } catch (error) {
+          setStatus(error.message, "error");
+        }
+      });
+      const start = async () => {
+        if (!tg || !tg.initData) {
+          setStatus("Open this Mini App inside Telegram from your group’s /famigo button.", "error");
+          return;
+        }
+        tg.ready();
+        tg.expand();
+        try {
+          if (groupId) await loadCommunity();
+          else await showGroupPicker();
+        } catch (error) {
+          setStatus(error.message, "error");
+        }
+      };
+      start();
+    })();
+  </script>
+</body>
+</html>
