@@ -67,8 +67,9 @@ A Telegram bot with **three separate, independent systems** for managing your pr
 5. **Edit `.env` with your settings:**
    ```
    BOT_TOKEN=your_token_here
-   BOT_ADMIN_ID=your_user_id_here
+   BOT_ADMIN_ID=123456789
    ```
+   Set `BOT_ADMIN_ID` to your numeric Telegram user ID; do not leave it as text or a placeholder.
 
 6. **Run the bot:**
    ```bash
