@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Enum as SQLEnum, Text, Boolean, Float
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Enum as SQLEnum, Text, Boolean, Float, JSON
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from datetime import datetime
 from enum import Enum
@@ -9,7 +9,7 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 Base = declarative_base()
 
 
-# ============ ENUMS FOR REMINDER & FOCUS ============
+# ============ ENUMS ============
 class ReminderStatus(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
@@ -43,7 +43,6 @@ class FocusVisibility(str, Enum):
     SILENT = "silent"
 
 
-# ============ ENUMS FOR FAMIGO SOCIAL ============
 class RelationshipType(str, Enum):
     FRIEND = "friend"
     BEST_FRIEND = "best_friend"
@@ -73,29 +72,33 @@ class ProfileVisibility(str, Enum):
     HIDDEN = "hidden"
 
 
-class MoodType(str, Enum):
-    HAPPY = "happy"
-    CHILL = "chill"
-    ENERGETIC = "energetic"
-    TIRED = "tired"
-    SAD = "sad"
-    THINKING = "thinking"
-    VIBING = "vibing"
-    ROMANTIC = "romantic"
-    OVERWHELMED = "overwhelmed"
-    FOCUSED = "focused"
-    EXCITED = "excited"
-
-
 class BirthdayVisibility(str, Enum):
     HIDDEN = "hidden"
     BIRTHDAY_ONLY = "birthday_only"
     VISIBLE = "visible"
 
 
-# ============ CORE MODELS ============
+class UserRole(str, Enum):
+    MEMBER = "member"
+    MODERATOR = "moderator"
+    ADMIN = "admin"
+    OWNER = "owner"
+
+
+class GroupPermission(str, Enum):
+    VIEW_PROFILES = "view_profiles"
+    EDIT_PROFILES = "edit_profiles"
+    MANAGE_CONFESSIONS = "manage_confessions"
+    MANAGE_USERS = "manage_users"
+    MANAGE_LEVELS = "manage_levels"
+    VIEW_STATISTICS = "view_statistics"
+    CONFIGURE_GROUP = "configure_group"
+    BAN_USERS = "ban_users"
+    RESET_REPUTATION = "reset_reputation"
+
+
+# ============ CORE USER MODEL ============
 class User(Base):
-    """Core user model."""
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
@@ -105,13 +108,10 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
     reminders = relationship("Reminder", back_populates="user")
     focus_sessions = relationship("FocusSession", back_populates="user")
     afk_status = relationship("AFK", back_populates="user", uselist=False)
     focus_statistics = relationship("FocusStatistics", back_populates="user", uselist=False)
-    
-    # Famigo social relationships
     profiles = relationship("FamigoProfile", back_populates="user")
     interests = relationship("UserInterest", back_populates="user")
     connections = relationship("Connection", foreign_keys="Connection.user_id", back_populates="user")
@@ -119,10 +119,75 @@ class User(Base):
     favorites = relationship("Favorite", back_populates="user")
     confessions = relationship("Confession", back_populates="user")
     mood_history = relationship("MoodStatus", back_populates="user")
+    family_tree_nodes = relationship("FamilyTreeNode", foreign_keys="FamilyTreeNode.user_id", back_populates="user")
+    group_roles = relationship("GroupRole", back_populates="user")
 
 
+# ============ GROUP ADMINISTRATION ============
+class GroupConfig(Base):
+    """Group configuration and settings - owned by group admin/owner."""
+    __tablename__ = "group_configs"
+
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, unique=True, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    group_name = Column(String, nullable=True)
+    group_description = Column(Text, nullable=True)
+    
+    # Reputation settings
+    default_reputation = Column(Integer, default=0)
+    default_level = Column(Integer, default=1)
+    reputation_multiplier = Column(Float, default=1.0)
+    level_threshold = Column(JSON, default='{"2": 100, "3": 250, "4": 500, "5": 1000}')
+    
+    # Feature toggles
+    confessions_enabled = Column(Boolean, default=True)
+    achievements_enabled = Column(Boolean, default=True)
+    family_tree_enabled = Column(Boolean, default=True)
+    reputation_visible = Column(Boolean, default=True)
+    leaderboard_enabled = Column(Boolean, default=True)
+    
+    # Moderation
+    profile_approval_required = Column(Boolean, default=False)
+    auto_ban_spam_reports = Column(Boolean, default=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class GroupRole(Base):
+    """User's role within a specific group."""
+    __tablename__ = "group_roles"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    group_id = Column(Integer, nullable=False)
+    role = Column(SQLEnum(UserRole), default=UserRole.MEMBER)
+    
+    # Permissions override
+    permissions = Column(JSON, nullable=True)  # Custom permissions if different from role
+    
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    assigned_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    
+    user = relationship("User", back_populates="group_roles", foreign_keys=[user_id])
+
+
+class GroupBan(Base):
+    """Ban users from group."""
+    __tablename__ = "group_bans"
+
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, nullable=False)
+    banned_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    reason = Column(String, nullable=True)
+    banned_by = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    banned_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)  # None = permanent
+
+
+# ============ AFK SYSTEM ============
 class AFK(Base):
-    """AFK status model - independent system."""
     __tablename__ = "afk"
 
     id = Column(Integer, primary_key=True)
@@ -133,8 +198,8 @@ class AFK(Base):
     user = relationship("User", back_populates="afk_status")
 
 
+# ============ REMINDER SYSTEM ============
 class Reminder(Base):
-    """Reminder model - independent system."""
     __tablename__ = "reminders"
 
     id = Column(Integer, primary_key=True)
@@ -151,8 +216,8 @@ class Reminder(Base):
     user = relationship("User", back_populates="reminders")
 
 
+# ============ FOCUS SYSTEM ============
 class FocusSession(Base):
-    """Focus session model - independent system."""
     __tablename__ = "focus_sessions"
 
     id = Column(Integer, primary_key=True)
@@ -177,7 +242,6 @@ class FocusSession(Base):
 
 
 class FocusStatistics(Base):
-    """Focus statistics model - independent system."""
     __tablename__ = "focus_statistics"
 
     id = Column(Integer, primary_key=True)
@@ -193,7 +257,7 @@ class FocusStatistics(Base):
     user = relationship("User", back_populates="focus_statistics")
 
 
-# ============ FAMIGO SOCIAL MODELS ============
+# ============ FAMIGO SOCIAL SYSTEM ============
 class FamigoProfile(Base):
     """User's Famigo social profile - GROUP SCOPED."""
     __tablename__ = "famigo_profiles"
@@ -233,6 +297,10 @@ class FamigoProfile(Base):
     level = Column(Integer, default=1)
     reputation_last_updated = Column(DateTime, default=datetime.utcnow)
     
+    # Admin override
+    reputation_override = Column(Integer, nullable=True)
+    level_override = Column(Integer, nullable=True)
+    
     # Timestamps
     joined_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -267,7 +335,7 @@ class Connection(Base):
     relationship_type = Column(SQLEnum(RelationshipType), default=RelationshipType.FRIEND)
     custom_relationship = Column(String, nullable=True)
     visibility = Column(SQLEnum(RelationshipVisibility), default=RelationshipVisibility.PUBLIC)
-    status = Column(String, default="pending")  # pending, accepted, declined
+    status = Column(String, default="pending")
     initiated_at = Column(DateTime, default=datetime.utcnow)
     accepted_at = Column(DateTime, nullable=True)
     
@@ -282,7 +350,7 @@ class Favorite(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     group_id = Column(Integer, nullable=False)
-    category = Column(String, nullable=False)  # Movie, Song, Artist, etc.
+    category = Column(String, nullable=False)
     value = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -295,9 +363,9 @@ class CurrentlyInto(Base):
     __tablename__ = "currently_into"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user_id = Column(Integer, nullable=False)
     group_id = Column(Integer, nullable=False)
-    category = Column(String, nullable=False)  # Watching, Listening, Reading, Playing, etc.
+    category = Column(String, nullable=False)
     value = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     set_at = Column(DateTime, default=datetime.utcnow)
@@ -311,7 +379,6 @@ class MoodStatus(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     group_id = Column(Integer, nullable=False)
-    mood = Column(SQLEnum(MoodType), nullable=False)
     custom_mood = Column(String, nullable=True)
     set_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=True)
@@ -325,7 +392,7 @@ class SocialLink(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
-    platform = Column(String, nullable=False)  # Instagram, GitHub, Twitter, etc.
+    platform = Column(String, nullable=False)
     username_or_url = Column(String, nullable=False)
     display_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -340,8 +407,9 @@ class Confession(Base):
     group_id = Column(Integer, nullable=False)
     confession_text = Column(Text, nullable=False)
     is_anonymous = Column(Boolean, default=True)
-    message_id = Column(Integer, nullable=True)  # Telegram message ID
-    status = Column(String, default="active")  # active, deleted, flagged
+    message_id = Column(Integer, nullable=True)
+    status = Column(String, default="active")
+    report_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="confessions")
@@ -353,7 +421,7 @@ class ConfessionReaction(Base):
 
     id = Column(Integer, primary_key=True)
     confession_id = Column(Integer, ForeignKey("confessions.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user_id = Column(Integer, nullable=False)
     reaction_emoji = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -378,7 +446,7 @@ class CommunityEvent(Base):
 
     id = Column(Integer, primary_key=True)
     group_id = Column(Integer, nullable=False)
-    event_type = Column(String, nullable=False)  # introduction, connection, achievement, birthday, etc.
+    event_type = Column(String, nullable=False)
     user_id = Column(Integer, nullable=True)
     related_user_id = Column(Integer, nullable=True)
     event_data = Column(Text, nullable=True)
@@ -408,21 +476,62 @@ class UserSettings(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), unique=True, nullable=False)
     
-    # Privacy
     profile_privacy_default = Column(SQLEnum(ProfileVisibility), default=ProfileVisibility.PUBLIC)
     allow_confessions = Column(Boolean, default=True)
     allow_say_hi = Column(Boolean, default=True)
     allow_connections = Column(Boolean, default=True)
     allow_discoveries = Column(Boolean, default=True)
     
-    # Notifications
     notify_connections = Column(Boolean, default=True)
     notify_say_hi = Column(Boolean, default=True)
     notify_confessions = Column(Boolean, default=True)
     
-    # Preferences
     language = Column(String, default="en")
     show_achievements = Column(Boolean, default=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ============ FAMILY TREE SYSTEM ============
+class FamilyTreeNode(Base):
+    """Family tree node for relationship visualization - GROUP SCOPED."""
+    __tablename__ = "family_tree_nodes"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    group_id = Column(Integer, nullable=False)
+    
+    parent_id = Column(Integer, ForeignKey("family_tree_nodes.id"), nullable=True)
+    
+    # Relationship metadata
+    relationship_to_parent = Column(String, nullable=True)  # "parent", "sibling", "spouse", etc.
+    is_visible = Column(Boolean, default=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = relationship("User", back_populates="family_tree_nodes", foreign_keys=[user_id])
+    parent = relationship("FamilyTreeNode", remote_side=[id], backref="children")
+
+
+class FamilyTreeRelation(Base):
+    """Explicit family relationships - GROUP SCOPED."""
+    __tablename__ = "family_tree_relations"
+
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, nullable=False)
+    user1_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    user2_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    
+    relation_type = Column(String, nullable=False)  # "parent", "sibling", "spouse", "child", "cousin", etc.
+    
+    # Confirmation (both parties must approve)
+    user1_confirmed = Column(Boolean, default=False)
+    user2_confirmed = Column(Boolean, default=False)
+    confirmed_at = Column(DateTime, nullable=True)
+    
+    visibility = Column(SQLEnum(RelationshipVisibility), default=RelationshipVisibility.PUBLIC)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
