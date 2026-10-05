@@ -120,7 +120,11 @@ class User(Base):
     confessions = relationship("Confession", back_populates="user")
     mood_history = relationship("MoodStatus", back_populates="user")
     family_tree_nodes = relationship("FamilyTreeNode", foreign_keys="FamilyTreeNode.user_id", back_populates="user")
-    group_roles = relationship("GroupRole", back_populates="user")
+    group_roles = relationship(
+        "GroupRole",
+        back_populates="user",
+        foreign_keys="GroupRole.user_id",
+    )
 
 
 # ============ GROUP ADMINISTRATION ============
