@@ -3,14 +3,20 @@
 import logging
 import re
 from datetime import datetime, timedelta
-from urllib.parse import urlsplit
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InlineQueryResultArticle,
+    InputTextMessageContent,
+)
 from sqlalchemy import or_
 
 from bot.services import famigo as service
+from config import settings
+from bot.webapp import normalize_webapp_url
 from database import (
     Achievement,
     CommunityEvent,
@@ -88,8 +94,22 @@ async def send_private_text(bot, user_id: int, lines: list[str]):
 @router.message(Command("famigo"))
 async def cmd_famigo(message: types.Message):
     if await require_group(message):
+        bot_user = await message.bot.get_me()
+        webapp_url = normalize_webapp_url(settings.webapp_url)
+        buttons = [[
+            InlineKeyboardButton(
+                text="Find members inline",
+                switch_inline_query_current_chat=f"group:{message.chat.id} ",
+            )
+        ]]
+        if webapp_url:
+            buttons.append([InlineKeyboardButton(
+                text="Open Mini App",
+                url=f"https://t.me/{bot_user.username}?start=famigo_{message.chat.id}",
+            )])
         await message.answer(
-            "Famigo helps your group members meet and connect.\n\n"
+            "Famigo is your group's social space. Members who join can create a profile, browse other visible profiles in this group, discover shared interests, and request connections.\n\n"
+            "Profiles are shown only in the group they belong to. Use the buttons below to browse or open the interactive Mini App.\n\n"
             "/profile - View your group profile\n"
             "/setprofile field | value - Add or edit a profile field\n"
             "/interests - View your interests\n"
@@ -103,8 +123,53 @@ async def cmd_famigo(message: types.Message):
             "/socials - Privately view your saved links\n"
             "/privacy - Manage profile visibility\n"
             "/export - Export your data from this group\n"
-            "/deleteprofile - Delete your Famigo data from this group"
+            "/deleteprofile - Delete your Famigo data from this group",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
         )
+
+
+@router.inline_query()
+async def inline_group_directory(query: types.InlineQuery):
+    match = re.fullmatch(r"group:(-?\d+)(?:\s+(.*))?", query.query.strip(), re.IGNORECASE)
+    if not match or query.chat_type not in {"group", "supergroup"}:
+        await query.answer(
+            [],
+            cache_time=0,
+            is_personal=True,
+            switch_pm_text="Open Famigo in a group",
+            switch_pm_parameter="start",
+        )
+        return
+    group_id = int(match.group(1))
+    try:
+        member = await query.bot.get_chat_member(group_id, query.from_user.id)
+        if member.status in {"left", "kicked"} or (
+            member.status == "restricted" and not member.is_member
+        ):
+            await query.answer([], cache_time=0, is_personal=True)
+            return
+        bot_user = await query.bot.get_me()
+        await query.answer(
+            [InlineQueryResultArticle(
+                id="famigo-directory",
+                title="Open your group's Famigo directory",
+                description="Browse group profiles in the verified Telegram Mini App",
+                input_message_content=InputTextMessageContent(
+                    message_text="Open Famigo to browse your group's community."
+                ),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(
+                        text="Open group directory",
+                        url=f"https://t.me/{bot_user.username}?start=famigo_{group_id}",
+                    )
+                ]]),
+            )],
+            cache_time=0,
+            is_personal=True,
+        )
+    except Exception:
+        logger.exception("Failed to serve the group-scoped Famigo inline launcher")
+        await query.answer([], cache_time=0, is_personal=True)
 
 
 @router.message(Command("profile", "me", "myprofile", "intro"))
@@ -134,6 +199,18 @@ async def cmd_profile(message: types.Message):
         if target_id != viewer_id and profile.visibility == ProfileVisibility.HIDDEN:
             await message.answer("That member's profile is private.")
             return
+        if target_id != viewer_id:
+            try:
+                member = await message.bot.get_chat_member(message.chat.id, target_id)
+            except Exception:
+                logger.exception("Could not verify profile owner's current group membership")
+                await message.answer("I couldn't verify that member's current group membership.")
+                return
+            if member.status in {"left", "kicked"} or (
+                member.status == "restricted" and not member.is_member
+            ):
+                await message.answer("That profile is no longer available because the member left this group.")
+                return
 
         interests = session.query(UserInterest.interest).filter(
             UserInterest.user_id == target_id,
@@ -292,6 +369,21 @@ async def cmd_discover(message: types.Message):
         profiles = service.list_discoverable_profiles(
             session, message.chat.id, message.from_user.id
         )
+        active_profiles = []
+        for candidate in profiles:
+            try:
+                member = await message.bot.get_chat_member(message.chat.id, candidate.user_id)
+            except Exception:
+                logger.exception("Could not verify a Famigo discovery candidate")
+                await message.answer(
+                    "I couldn't verify group members. Ask an admin to make the bot an administrator, then try again."
+                )
+                return
+            if member.status not in {"left", "kicked"} and not (
+                member.status == "restricted" and not member.is_member
+            ):
+                active_profiles.append(candidate)
+        profiles = active_profiles
         if not profiles:
             await message.answer("There are no discoverable profiles in this group yet.")
             return

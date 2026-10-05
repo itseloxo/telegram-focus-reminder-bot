@@ -1,11 +1,13 @@
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher
-from aiogram.types import BotCommand
+from aiogram.types import BotCommand, MenuButtonWebApp, WebAppInfo
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiohttp import web
 from config import settings
 from database import init_db
 from bot.scheduler import init_scheduler, schedule_pending_reminders
+from bot.webapp import create_web_app, normalize_webapp_url
 from bot.handlers import afk, reminder, focus, common, famigo
 
 # Configure logging
@@ -14,7 +16,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
 
 async def main():
     """Initialize and run the bot."""
@@ -85,12 +86,28 @@ async def main():
         BotCommand(command="mygroups", description="Privately list your group profiles"),
     ])
 
+    webapp_url = normalize_webapp_url(settings.webapp_url)
+    if webapp_url:
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text="Famigo",
+                web_app=WebAppInfo(url=webapp_url),
+            )
+        )
+    else:
+        logger.warning("WEBAPP_URL is not configured; Telegram Mini App buttons are disabled")
+    web_runner = web.AppRunner(create_web_app(bot))
+    await web_runner.setup()
+    await web.TCPSite(web_runner, host="0.0.0.0", port=settings.webapp_port).start()
+    logger.info("Mini App HTTP server listening on port %s", settings.webapp_port)
+
     # Restore active reminders from the database after every bot restart.
     try:
         schedule_pending_reminders(bot, scheduler)
     except Exception:
         await bot.session.close()
         scheduler.shutdown()
+        await web_runner.cleanup()
         raise
 
     # Start polling
@@ -98,6 +115,7 @@ async def main():
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
+        await web_runner.cleanup()
         await bot.session.close()
         scheduler.shutdown()
 

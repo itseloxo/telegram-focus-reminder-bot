@@ -11,6 +11,8 @@ A Telegram group bot for building voluntary, group-specific social connections, 
 - Add group-specific interests and discover members with shared interests
 - Send a connection request that only its recipient can accept or decline
 - Hide your profile, export group profile data privately, or delete your group profile
+- Open a Telegram Mini App to browse, search, and edit profiles in the current group
+- Launch the group directory from Telegram inline mode, then browse profiles and request connections in the Mini App
 
 ### 💤 AFK System
 - Set an AFK status with optional reason
@@ -85,6 +87,7 @@ A Telegram group bot for building voluntary, group-specific social connections, 
 
 ### Famigo (use in a group)
 - `/famigo` - Show available Famigo commands
+- `/famigo` also opens buttons for the group directory in inline mode and the Mini App
 - `/profile` - View your profile in this group
 - `/setprofile field | value` - Set an optional field (for example, `/setprofile bio | I enjoy hiking`)
 - `/interests`, `/addinterest [interest]`, and `/removeinterest [interest]` - Manage group-specific interests
@@ -132,7 +135,17 @@ bot/services/famigo.py
 database.py
 ```
 
-Profile export and group-list output are sent privately. The bot can only deliver them if the user has started a private chat with it. This is the first implementation phase, not the entire production specification. Confessions, birthdays and member history, timeline and community insights, reputation and achievement criteria, the full relationship graph, a Mini App, database migrations, and several advanced reminder/focus workflows are not implemented yet.
+Profile export and group-list output are sent privately. The bot can only deliver them if the user has started a private chat with it. Every Mini App API request verifies Telegram's signed `initData` and confirms that the user is currently a member of the requested group; profile and activity queries always include that group's ID. Telegram inline queries do not reveal the destination chat ID, so Famigo's inline result is a safe launcher rather than a profile card; profile details are only shown after opening the Mini App and verifying group membership. Group commands such as `/profile` and `/discover` display results in the group itself.
+
+### Telegram Mini App and inline setup
+
+1. Deploy the bot on Railway and generate a public HTTPS domain for its service.
+2. Set `WEBAPP_URL` in Railway to that domain's root URL (for example, `https://your-service.up.railway.app`). Railway provides `PORT`; the bot serves the Mini App and API on that port.
+3. In a private chat with `@BotFather`, run `/setdomain` and select this bot, then enter the Railway domain **without** `https://` or a path.
+4. In BotFather, run `/setinline` for this bot and set a short placeholder such as `Find a group member`. Restart/redeploy the bot after changing variables.
+5. Add the bot to a group and make it an administrator so Telegram can reliably verify members. Run `/famigo` in that group; members can use **Open Mini App** or **Find members inline**.
+
+The bot's persistent menu also opens the Mini App. If opened without a group context, users can choose from groups where they already have a Famigo profile. New users should open the Mini App from `/famigo` in the group first. Profiles start visible to group members and can be hidden by their owner. No profile is made globally browsable. The app is a first social release; confessions, birthdays and member history, community insights, reputation/achievement criteria, the full relationship graph, database migrations, and several advanced reminder/focus workflows remain unfinished.
 
 ---
 
