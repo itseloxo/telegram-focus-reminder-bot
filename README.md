@@ -1,14 +1,16 @@
-# 🤖 Focus Reminder Bot
+# 🤝 FamigoBot
 
-A Telegram bot with **three separate, independent systems** for managing your productivity:
-
-- **💤 AFK System** - Mark yourself as unavailable
-- **⏰ Reminder System** - Schedule reminders for tasks
-- **📚 Focus Mode** - Self-discipline study sessions with fun callouts
+A Telegram group bot for building voluntary, group-specific social connections, with separate AFK, reminder, and focus tools.
 
 ---
 
 ## 🚀 Features
+
+### 🤝 Famigo social features
+- Create an optional profile separately in each group
+- Add group-specific interests and discover members with shared interests
+- Send a connection request that only its recipient can accept or decline
+- Hide your profile, export group profile data privately, or delete your group profile
 
 ### 💤 AFK System
 - Set an AFK status with optional reason
@@ -34,7 +36,7 @@ A Telegram bot with **three separate, independent systems** for managing your pr
 
 ## 📋 Requirements
 
-- Python 3.9+
+- Python 3.12+
 - Telegram Bot Token (get one from [@BotFather](https://t.me/botfather))
 - SQLite (included with Python)
 
@@ -81,6 +83,25 @@ A Telegram bot with **three separate, independent systems** for managing your pr
 
 ## 📖 Commands
 
+### Famigo (use in a group)
+- `/famigo` - Show available Famigo commands
+- `/profile` - View your profile in this group
+- `/setprofile field | value` - Set an optional field (for example, `/setprofile bio | I enjoy hiking`)
+- `/interests`, `/addinterest [interest]`, and `/removeinterest [interest]` - Manage group-specific interests
+- `/currently category | activity` - Share something you chose to do; `/watching`, `/listening`, `/reading`, and `/playing` are shortcuts
+- `/addfavorite category | item`, `/favorites`, and `/removefavorite category | item` - Manage group-specific favorites
+- `/mood [mood]` - Set a voluntary mood that expires after 24 hours; `/mood off` clears it
+- `/discover` - Find a group member with shared interests; `/random` picks a member fairly and avoids your last pick
+- `/connect @username [relationship]` - Send a confirmation-based connection request; reply to a member's message if they do not have a username
+- `/relationships` - List your approved connections
+- `/stats` - View group-specific profile stats
+- `/addsocial [platform] [username-or-https-url]`, `/socials`, and `/deletesocial [platform]` - Manage private user-level social links
+- `/privacy` and `/setprofileprivacy public|group_only|hidden` - Manage this group's profile visibility
+- `/discoverability on|off` and `/connectionrequests on|off` - Set global opt-outs that apply in every group
+- `/export` - Privately send your Famigo data from this group
+- `/deleteprofile` - Confirm and delete your Famigo data from this group
+- `/mygroups` - Privately list your group-specific profiles
+
 ### AFK
 - `/afk [reason]` - Mark as AFK
 - `/unafk` - Remove AFK status
@@ -103,24 +124,15 @@ A Telegram bot with **three separate, independent systems** for managing your pr
 
 ## 🏗️ Architecture
 
-Each system is **completely independent**:
+Famigo profile, interest, discovery, and connection operations are group-scoped and separated into handlers and services:
 
 ```
-Database Models:
-├── AFK (unavailability status)
-├── Reminder (scheduled tasks)
-├── FocusSession (self-discipline sessions)
-└── User (shared user settings)
-
-Handlers:
-├── bot/handlers/afk.py (AFK system)
-├── bot/handlers/reminder.py (Reminder system)
-├── bot/handlers/focus.py (Focus system)
-└── bot/handlers/common.py (General commands)
-
-Background Jobs:
-└── APScheduler (persistent job store for reminders & focus timers)
+bot/handlers/famigo.py
+bot/services/famigo.py
+database.py
 ```
+
+Profile export and group-list output are sent privately. The bot can only deliver them if the user has started a private chat with it. This is the first implementation phase, not the entire production specification. Confessions, birthdays and member history, timeline and community insights, reputation and achievement criteria, the full relationship graph, a Mini App, database migrations, and several advanced reminder/focus workflows are not implemented yet.
 
 ---
 

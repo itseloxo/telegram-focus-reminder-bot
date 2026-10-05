@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Enum as SQLEnum, Text, Boolean, Float, JSON
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Enum as SQLEnum, Text, Boolean, Float, JSON, UniqueConstraint
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from datetime import datetime
 from enum import Enum
@@ -290,7 +290,7 @@ class FamigoProfile(Base):
     personal_tags = Column(String, nullable=True)
     
     # Settings
-    visibility = Column(SQLEnum(ProfileVisibility), default=ProfileVisibility.PUBLIC)
+    visibility = Column(SQLEnum(ProfileVisibility), default=ProfileVisibility.GROUP_ONLY)
     birth_month = Column(Integer, nullable=True)
     birth_day = Column(Integer, nullable=True)
     birth_year = Column(Integer, nullable=True)
@@ -480,7 +480,7 @@ class UserSettings(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), unique=True, nullable=False)
     
-    profile_privacy_default = Column(SQLEnum(ProfileVisibility), default=ProfileVisibility.PUBLIC)
+    profile_privacy_default = Column(SQLEnum(ProfileVisibility), default=ProfileVisibility.GROUP_ONLY)
     allow_confessions = Column(Boolean, default=True)
     allow_say_hi = Column(Boolean, default=True)
     allow_connections = Column(Boolean, default=True)
@@ -494,6 +494,18 @@ class UserSettings(Base):
     show_achievements = Column(Boolean, default=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class DiscoveryHistory(Base):
+    """Most recent random discovery per user and group."""
+    __tablename__ = "discovery_history"
+    __table_args__ = (UniqueConstraint("user_id", "group_id"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    group_id = Column(Integer, nullable=False)
+    last_discovered_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
