@@ -63,7 +63,12 @@ async def main():
     ])
 
     # Restore active reminders from the database after every bot restart.
-    schedule_pending_reminders(bot, scheduler)
+    try:
+        schedule_pending_reminders(bot, scheduler)
+    except Exception:
+        await bot.session.close()
+        scheduler.shutdown()
+        raise
 
     # Start polling
     logger.info("Bot started. Polling for updates...")
