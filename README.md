@@ -75,6 +75,7 @@ A Telegram bot with **three separate, independent systems** for managing your pr
    ```bash
    python main.py
    ```
+   The bot publishes its available commands to Telegram when it starts. Open the bot chat and type `/` to see them.
 
 ---
 
@@ -151,9 +152,9 @@ DEFAULT_TIMEZONE=UTC                   # Default user timezone
 - Ensure bot has required permissions in the group
 
 **Reminders not firing:**
-- Check database file exists (bot.db)
-- Restart the bot to rebuild scheduler state
-- Check logs for errors
+- Start a private chat with the bot using `/start` so it can message you.
+- Check the Railway logs for delivery errors.
+- Active reminders are restored from the database when the bot restarts.
 
 **Focus warnings too frequent:**
 - Adjust `FOCUS_WARNING_COOLDOWN_MINUTES` in `.env`

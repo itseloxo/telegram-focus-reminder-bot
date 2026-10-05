@@ -1,7 +1,8 @@
 from aiogram import Router, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from database import get_session, User, Reminder, ReminderStatus, ReminderRecurrence
+from bot.scheduler import schedule_reminder
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta
 import re
 import logging
@@ -13,7 +14,7 @@ router = Router()
 
 def parse_time_offset(time_str: str):
     """Parse time offset like '2h', '30m', '1d'."""
-    match = re.match(r'(\d+)([mhd])', time_str.lower())
+    match = re.fullmatch(r'(\d+)([mhd])', time_str.lower())
     if not match:
         return None
     
@@ -30,7 +31,7 @@ def parse_time_offset(time_str: str):
 
 
 @router.message(Command("remind"))
-async def cmd_remind(message: types.Message):
+async def cmd_remind(message: types.Message, scheduler: AsyncIOScheduler):
     """Handle /remind command - Set a reminder."""
     
     # Parse command: /remind [time] [task]
@@ -42,8 +43,7 @@ async def cmd_remind(message: types.Message):
             "Examples:\n"
             "/remind 2h study\n"
             "/remind 30m drink water\n"
-            "/remind 8pm call mom\n"
-            "/remind tomorrow 7pm assignment"
+            "/remind 1d submit assignment"
         )
         return
     
@@ -82,22 +82,19 @@ async def cmd_remind(message: types.Message):
         )
         session.add(reminder)
         session.commit()
+        schedule_reminder(message.bot, scheduler, reminder.id, scheduled_at)
         
         # Calculate display time
-        time_delta = scheduled_at - datetime.utcnow()
-        hours = time_delta.seconds // 3600
-        minutes = (time_delta.seconds % 3600) // 60
+        time_delta_seconds = int((scheduled_at - datetime.utcnow()).total_seconds())
+        hours = time_delta_seconds // 3600
+        minutes = (time_delta_seconds % 3600) // 60
         
         time_display = f"in {hours}h {minutes}m" if hours > 0 else f"in {minutes}m"
         
         await message.answer(
             f"⏰ Reminder set!\n\n"
             f"📝 {task}\n"
-            f"⏱️ {time_display}",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="✏️ Edit", callback_data=f"edit_reminder_{reminder.id}")],
-                [InlineKeyboardButton(text="🗑 Delete", callback_data=f"del_reminder_{reminder.id}")]
-            ])
+            f"⏱️ {time_display}"
         )
         
         logger.info(f"Reminder created for user {message.from_user.id}: {task} at {scheduled_at}")
